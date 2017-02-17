@@ -1,0 +1,4 @@
+/random3SAT
+.idea/
+cmake-build-debug/
+.DS_Store
