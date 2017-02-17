@@ -56,8 +56,11 @@ int currentValueInModel(int lit) {
 
 void setLiteralToTrue(int lit) {
     modelStack.push_back(lit);
-    if(lit > 0) model[lit] = TRUE;
-    else model[-lit] = FALSE;
+    if(lit > 0) {
+        model[lit] = TRUE;
+    } else {
+        model[-lit] = FALSE;
+    }
 }
 
 
@@ -70,8 +73,9 @@ bool propagateGivesConflict() {
             int lastLitUndef = 0;
             for(uint k = 0; not someLitTrue and k < clauses[i].size(); ++k) {
                 int val = currentValueInModel(clauses[i][k]);
-                if(val == TRUE) someLitTrue = true;
-                else if(val == UNDEF) {
+                if(val == TRUE) {
+                    someLitTrue = true;
+                } else if(val == UNDEF) {
                     ++numUndefs;
                     lastLitUndef = clauses[i][k];
                 }
@@ -107,7 +111,9 @@ void backtrack() {
 // Heuristic forfinding the next decision literal:
 int getNextDecisionLiteral() {
     for(uint i = 1; i <= numVars; ++i) {// stupid heuristic:
-        // if(model[i] == UNDEF) return i;  // returns first UNDEF var, positively
+        if(model[i] == UNDEF) { // returns first UNDEF var, positively
+            return i;
+        }
     }    
     return 0; // reurns 0 when all literals are defined
 }
