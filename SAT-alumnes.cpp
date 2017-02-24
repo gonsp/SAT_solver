@@ -1,7 +1,6 @@
 #include <iostream>
-#include <stdlib.h>
-#include <algorithm>
 #include <vector>
+#include <list>
 
 using namespace std;
 
@@ -135,13 +134,16 @@ void checkmodel() {
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+
+    freopen("input.txt","r",stdin);
+
     readClauses(); // reads numVars, numClauses and clauses
     model.resize(numVars + 1, UNDEF);
     indexOfNextLitToPropagate = 0;
     decisionLevel = 0;
 
-    // Take care of initial unit clauses, ifany
+    // Take care of initial unit clauses, if any
     for(uint i = 0; i < numClauses; ++i) {
         if(clauses[i].size() == 1) {
             int lit = clauses[i][0];
@@ -177,3 +179,24 @@ int main() {
         setLiteralToTrue(decisionLit);    // now push decisionLit on top of the mark
     }
 }  
+
+/*
+ * Unit literal search
+ * Unit literal propagation
+ * Unit literal elimination
+ *
+ * Pure literal search
+ * Pure literal propagation
+ * Pure literal elimination
+ *
+ * Clauses size sorting (?)
+ *
+ * List of clauses in which a literal appears to speed up the propagation and clauses elimination
+ *
+ *
+ * Use of variable apparition amount to select the higher value as heuristic to speed up the process
+ * --------------
+ * Cuando a una variable se le cambia su valor:
+ *      En los sitios en los que aparezca verdadero, se podrá propagar una variable indefinida si es la unica que aparece y no hay cierta en la clausula
+ *      En los sitios en los que aparezca cierto, se podrá "eliminar" esa cláusula
+ */
