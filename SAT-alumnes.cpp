@@ -8,6 +8,64 @@ using namespace std;
 #define TRUE 1
 #define FALSE 0
 
+void setLiteralToTrue(int lit);
+int currentValueInModel(int lit);
+
+struct clause {
+
+    int undefineds = 0;
+
+    list<int> literals;
+
+    void add_literal(int literal) {
+        literals.push_back(literal);
+        undefineds++;
+    }
+
+    bool one_undefined() {
+    }
+
+    bool propagate() {
+        bool someLitTrue = false;
+        int numUndefs = 0;
+        int lastLitUndef = 0;
+        for(auto it = literals.begin(); not someLitTrue and it != literals.end(); ++it) {
+            int val = currentValueInModel(*it);
+            if(val == TRUE) {
+                someLitTrue = true;
+            } else if(val == UNDEF) {
+                ++numUndefs;
+                lastLitUndef = *it;
+            }
+        }
+        if(not someLitTrue and numUndefs == 0) {
+            return true;
+        } else if(not someLitTrue and numUndefs == 1) { // conflict! all lits false
+            setLiteralToTrue(lastLitUndef);
+        }
+        return false;
+    }
+
+    bool check() {
+        bool someTrue = false;
+        for(auto it = literals.begin(); not someTrue and it != literals.end(); ++it) {
+            someTrue = (currentValueInModel(*it) == TRUE);
+        }
+        return someTrue;
+    }
+
+    void print() {
+        for(auto it = literals.begin(); it != literals.end(); ++it) {
+            cout << *it << " ";
+        }
+        cout << endl;
+    }
+};
+
+uint numVars;
+uint numClauses;
+vector<clause> clauses;
+
 struct var {
     int value;
     list<int> true_clauses;
@@ -16,16 +74,44 @@ struct var {
     var() {
         value = UNDEF;
     }
+
+    void add_clause(int clauseID, bool negation) {
+        if(negation) {
+            true_clauses.push_back(clauseID);
+        } else {
+            false_clauses.push_back(clauseID);
+        }
+    }
+
+    bool propagate() {
+        list<int>::iterator it;
+        list<int>::iterator end;
+        if(value == TRUE) {
+            it = true_clauses.begin();
+            end = true_clauses.end();
+        } else {
+            it = false_clauses.begin();
+            end = false_clauses.end();
+        }
+        while(it != end) {
+            cout << clauses.size() << " , " << *it << endl;
+            if(clauses[*it].propagate()) {
+                return true;
+            }
+            ++it;
+        }
+        return false;
+    }
+
+    void rollback() {
+
+    }
 };
 
-uint numVars;
-uint numClauses;
-vector<vector<int> > clauses;
 vector<var> model;
 vector<int> modelStack;
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
-
 
 void readClauses() {
     // Skip comments
@@ -39,12 +125,21 @@ void readClauses() {
     // Read "cnf numVars numClauses"
     string aux;
     cin >> aux >> numVars >> numClauses;
+    cout << aux << endl;
+    cout << numVars << endl;
+    cout << numClauses << endl;
+    model.resize(numVars + 1, var());
     clauses.resize(numClauses);
     // Read clauses
-    for(uint i = 0; i < numClauses; ++i) {
+    for(uint id = 0; id < numClauses; ++id) {
         int lit;
         while(cin >> lit and lit != 0) {
-            clauses[i].push_back(lit);
+            clauses[id].add_literal(lit);
+            if(lit < 0) {
+                model[-lit].add_clause(id, true);
+            } else {
+                model[lit].add_clause(id, false);
+            }
         }
     }
 }
@@ -75,25 +170,9 @@ void setLiteralToTrue(int lit) {
 
 bool propagateGivesConflict() {
     while(indexOfNextLitToPropagate < modelStack.size()) {
-        ++indexOfNextLitToPropagate;
-        for(uint i = 0; i < numClauses; ++i) {
-            bool someLitTrue = false;
-            int numUndefs = 0;
-            int lastLitUndef = 0;
-            for(uint k = 0; not someLitTrue and k < clauses[i].size(); ++k) {
-                int val = currentValueInModel(clauses[i][k]);
-                if(val == TRUE) {
-                    someLitTrue = true;
-                } else if(val == UNDEF) {
-                    ++numUndefs;
-                    lastLitUndef = clauses[i][k];
-                }
-            }
-            if(not someLitTrue and numUndefs == 0) {
-                return true;
-            } else if(not someLitTrue and numUndefs == 1) { // conflict! all lits false
-                setLiteralToTrue(lastLitUndef);
-            }
+        int lit = modelStack[indexOfNextLitToPropagate++];
+        if(model[lit].propagate()) {
+            return true;
         }
     }
     return false;
@@ -129,16 +208,9 @@ int getNextDecisionLiteral() {
 
 void checkmodel() {
     for(int i = 0; i < numClauses; ++i) {
-        bool someTrue = false;
-        for(int j = 0; not someTrue and j < clauses[i].size(); ++j) {
-            someTrue = (currentValueInModel(clauses[i][j]) == TRUE);
-        }
-        if(not someTrue) {
+        if(not clauses[i].check()) {
             cout << "Error in model, clause is not satisfied:";
-            for(int j = 0; j < clauses[i].size(); ++j) {
-                cout << clauses[i][j] << " ";
-            }
-            cout << endl;
+            clauses[i].print();
             exit(1);
         }
     }
@@ -149,14 +221,13 @@ int main(int argc, char* argv[]) {
     freopen("input.txt","r",stdin);
 
     readClauses(); // reads numVars, numClauses and clauses
-    model.resize(numVars + 1, var());
     indexOfNextLitToPropagate = 0;
     decisionLevel = 0;
 
     // Take care of initial unit clauses, if any
     for(uint i = 0; i < numClauses; ++i) {
-        if(clauses[i].size() == 1) {
-            int lit = clauses[i][0];
+        if(clauses[i].literals.size() == 1) {
+            int lit = clauses[i].literals.front();
             int val = currentValueInModel(lit);
             if(val == FALSE) {
                 cout << "UNSATISFIABLE" << endl;
@@ -165,7 +236,9 @@ int main(int argc, char* argv[]) {
                 setLiteralToTrue(lit);
             }
         }
-    }   
+    }
+
+    auto test = clauses;
 
     // DPLL algorithm
     while(true) {
