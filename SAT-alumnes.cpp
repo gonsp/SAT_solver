@@ -8,10 +8,20 @@ using namespace std;
 #define TRUE 1
 #define FALSE 0
 
+struct var {
+    int value;
+    list<int> true_clauses;
+    list<int> false_clauses;
+
+    var() {
+        value = UNDEF;
+    }
+};
+
 uint numVars;
 uint numClauses;
 vector<vector<int> > clauses;
-vector<int> model;
+vector<var> model;
 vector<int> modelStack;
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
@@ -42,12 +52,12 @@ void readClauses() {
 
 int currentValueInModel(int lit) {
     if(lit >= 0) {
-        return model[lit];
+        return model[lit].value;
     } else {
-        if(model[-lit] == UNDEF) {
+        if(model[-lit].value == UNDEF) {
             return UNDEF;
         } else {
-            return 1 - model[-lit];
+            return 1 - model[-lit].value;
         }
     }
 }
@@ -56,9 +66,9 @@ int currentValueInModel(int lit) {
 void setLiteralToTrue(int lit) {
     modelStack.push_back(lit);
     if(lit > 0) {
-        model[lit] = TRUE;
+        model[lit].value = TRUE;
     } else {
-        model[-lit] = FALSE;
+        model[-lit].value = FALSE;
     }
 }
 
@@ -95,7 +105,7 @@ void backtrack() {
     int lit = 0;
     while(modelStack[i] != 0) { // 0 is the DL mark
         lit = modelStack[i];
-        model[abs(lit)] = UNDEF;
+        model[abs(lit)].value = UNDEF;
         modelStack.pop_back();
         --i;
     }
@@ -110,7 +120,7 @@ void backtrack() {
 // Heuristic forfinding the next decision literal:
 int getNextDecisionLiteral() {
     for(uint i = 1; i <= numVars; ++i) {// stupid heuristic:
-        if(model[i] == UNDEF) { // returns first UNDEF var, positively
+        if(model[i].value == UNDEF) { // returns first UNDEF var, positively
             return i;
         }
     }    
@@ -139,7 +149,7 @@ int main(int argc, char* argv[]) {
     freopen("input.txt","r",stdin);
 
     readClauses(); // reads numVars, numClauses and clauses
-    model.resize(numVars + 1, UNDEF);
+    model.resize(numVars + 1, var());
     indexOfNextLitToPropagate = 0;
     decisionLevel = 0;
 
