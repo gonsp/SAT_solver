@@ -89,12 +89,11 @@ struct var {
         if(value == TRUE) {
             it = true_clauses.begin();
             end = true_clauses.end();
-        } else {
+        } else if(value == FALSE) {
             it = false_clauses.begin();
             end = false_clauses.end();
         }
         while(it != end) {
-            cout << clauses.size() << " , " << *it << endl;
             if(clauses[*it].propagate()) {
                 return true;
             }
@@ -125,9 +124,6 @@ void readClauses() {
     // Read "cnf numVars numClauses"
     string aux;
     cin >> aux >> numVars >> numClauses;
-    cout << aux << endl;
-    cout << numVars << endl;
-    cout << numClauses << endl;
     model.resize(numVars + 1, var());
     clauses.resize(numClauses);
     // Read clauses
@@ -171,7 +167,7 @@ void setLiteralToTrue(int lit) {
 bool propagateGivesConflict() {
     while(indexOfNextLitToPropagate < modelStack.size()) {
         int lit = modelStack[indexOfNextLitToPropagate++];
-        if(model[lit].propagate()) {
+        if(model[abs(lit)].propagate()) {
             return true;
         }
     }
@@ -239,6 +235,7 @@ int main(int argc, char* argv[]) {
     }
 
     auto test = clauses;
+    auto model_test = model;
 
     // DPLL algorithm
     while(true) {
