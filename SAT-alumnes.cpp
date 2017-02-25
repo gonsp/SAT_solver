@@ -47,6 +47,7 @@ struct clause {
 
     bool propagate(int clauseID, bool lit_true) {
         if(lit_true) {
+            return false;
             for(auto it = literals.begin(); it != literals.end(); ++it) {
                 int val = currentValueInModel(*it);
                 if(val == UNDEF) {
@@ -161,8 +162,8 @@ struct var {
         return false;
     }
 
-    void rollback() {
-
+    int size() {
+        return true_clauses.size();// + false_clauses.size();
     }
 };
 
@@ -263,12 +264,17 @@ void backtrack() {
 
 // Heuristic forfinding the next decision literal:
 int getNextDecisionLiteral() {
+    int max = 0;
+    int var = 0;
     for(uint i = 1; i <= numVars; ++i) {// stupid heuristic:
         if(model[i].value == UNDEF) { // returns first UNDEF var, positively
-            return i;
+            if(model[i].size() > max) {
+                var = i;
+                max = model[i].size();
+            }
         }
     }
-    return 0; // returns 0 when all literals are defined
+    return var; // returns 0 when all literals are defined
 }
 
 void checkmodel() {
@@ -282,6 +288,20 @@ void checkmodel() {
     }
 }
 
+
+void test_check() {
+    vector<bool> appearing_clauses(numClauses, false);
+    int total = 0;
+    for(int i = 0; i < model.size(); ++i) {
+        for(auto it = model[i].true_clauses.begin(); it != model[i].true_clauses.end(); ++it) {
+            if(not appearing_clauses[*it]) {
+                appearing_clauses[*it] = true;
+                ++total;
+            }
+        }
+    }
+    cout << "ACTIVE CLAUSES = " << total << endl;
+}
 
 
 int max_level = 0;
