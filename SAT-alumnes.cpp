@@ -56,9 +56,9 @@ struct clause {
 
     void print() {
         for(auto it = literals.begin(); it != literals.end(); ++it) {
-            cout << *it << " ";
+            //cout << *it << " ";
         }
-        cout << endl;
+        //cout << endl;
     }
 };
 
@@ -205,7 +205,7 @@ int getNextDecisionLiteral() {
 void checkmodel() {
     for(int i = 0; i < numClauses; ++i) {
         if(not clauses[i].check()) {
-            cout << "Error in model, clause is not satisfied:";
+            //cout << "Error in model, clause is not satisfied:";
             clauses[i].print();
             exit(1);
         }
@@ -214,7 +214,10 @@ void checkmodel() {
 
 int main(int argc, char* argv[]) {
 
-    freopen("input.txt","r",stdin);
+    if(argc == 1) {
+        exit(0);
+    }
+    freopen(argv[1], "r", stdin);
 
     readClauses(); // reads numVars, numClauses and clauses
     indexOfNextLitToPropagate = 0;
@@ -226,7 +229,7 @@ int main(int argc, char* argv[]) {
             int lit = clauses[i].literals.front();
             int val = currentValueInModel(lit);
             if(val == FALSE) {
-                cout << "UNSATISFIABLE" << endl;
+                //cout << "UNSATISFIABLE" << endl;
                 return 10;
             } else if(val == UNDEF) {
                 setLiteralToTrue(lit);
@@ -241,7 +244,7 @@ int main(int argc, char* argv[]) {
     while(true) {
         while(propagateGivesConflict()) {
             if(decisionLevel == 0) {
-                cout << "UNSATISFIABLE" << endl;
+                //cout << "UNSATISFIABLE" << endl;
                 return 10;
             }
             backtrack();
@@ -249,7 +252,7 @@ int main(int argc, char* argv[]) {
         int decisionLit = getNextDecisionLiteral();
         if(decisionLit == 0) {
             checkmodel();
-            cout << "SATISFIABLE" << endl;
+            //cout << "SATISFIABLE" << endl;
             return 20;
         }
         // start new decision level:
