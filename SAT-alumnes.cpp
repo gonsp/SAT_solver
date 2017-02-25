@@ -8,70 +8,34 @@ using namespace std;
 #define TRUE 1
 #define FALSE 0
 
-enum change_type {
-    VALUE_CHANGE, CLAUSE_ELIMINATION
-};
-
-struct change {
-    change_type type;
-    int lit;
-    int clauseID = -1;
-
-    change(int lit) {
-        type = VALUE_CHANGE;
-        this->lit = lit;
-    }
-
-    change(int varID, int clauseID, bool negation) {
-        type = CLAUSE_ELIMINATION;
-        this->lit = negation ? -varID : varID;
-        this->clauseID = clauseID;
-    }
-};
-
-vector<change> modelStack;
-
 void setLiteralToTrue(int lit);
 int currentValueInModel(int lit);
-void propagateByClause(int lit, int clauseID);
 
 struct clause {
 
     list<int> literals;
-    vector<int> test;
 
     void add_literal(int literal) {
         literals.push_back(literal);
-        test.push_back(literal);
     }
 
-    bool propagate(int clauseID, bool lit_true) {
-        if(lit_true) {
-            return false;
-            for(auto it = literals.begin(); it != literals.end(); ++it) {
-                int val = currentValueInModel(*it);
-                if(val == UNDEF) {
-                    propagateByClause(*it, clauseID);
-                }
+    bool propagate() {
+        bool someLitTrue = false;
+        int numUndefs = 0;
+        int lastLitUndef = 0;
+        for(auto it = literals.begin(); not someLitTrue and it != literals.end(); ++it) {
+            int val = currentValueInModel(*it);
+            if(val == TRUE) {
+                someLitTrue = true;
+            } else if(val == UNDEF) {
+                ++numUndefs;
+                lastLitUndef = *it;
             }
-        } else {
-            bool someLitTrue = false;
-            int numUndefs = 0;
-            int lastLitUndef = 0;
-            for(auto it = literals.begin(); not someLitTrue and it != literals.end(); ++it) {
-                int val = currentValueInModel(*it);
-                if(val == TRUE) {
-                    someLitTrue = true;
-                } else if(val == UNDEF) {
-                    ++numUndefs;
-                    lastLitUndef = *it;
-                }
-            }
-            if(not someLitTrue and numUndefs == 0) {
-                return true;
-            } else if(not someLitTrue and numUndefs == 1) {
-                setLiteralToTrue(lastLitUndef);
-            }
+        }
+        if(not someLitTrue and numUndefs == 0) {
+            return true;
+        } else if(not someLitTrue and numUndefs == 1) {
+            setLiteralToTrue(lastLitUndef);
         }
         return false;
     }
@@ -114,47 +78,18 @@ struct var {
         }
     }
 
-    void enable_clause(int id, bool negation) {
-        if(negation) {
-            false_clauses.remove(id);
-            false_clauses.push_back(id);
-        } else {
-            true_clauses.remove(id);
-            true_clauses.push_back(id);
-        }
-    }
-
-    void disable_clause(int varID, int clauseID, bool negation) {
-        if(negation) {
-            false_clauses.remove(clauseID);
-            if(false_clauses.size() == 0) {
-                value = TRUE;
-                modelStack.push_back(change(varID));
-            }
-        } else {
-            true_clauses.remove(clauseID);
-            if(true_clauses.size() == 0) {
-                value = FALSE;
-                modelStack.push_back(change(varID));
-            }
-        }
-    }
-
     bool propagate() {
         list<int>::iterator it;
         list<int>::iterator end;
-        it = true_clauses.begin();
-        end = true_clauses.end();
-        while(it != end) {
-            if(clauses[*it].propagate(*it, value == TRUE)) {
-                return true;
-            }
-            ++it;
+        if(value == FALSE) {
+            it = true_clauses.begin();
+            end = true_clauses.end();
+        } else if(value == TRUE) {
+            it = false_clauses.begin();
+            end = false_clauses.end();
         }
-        it = false_clauses.begin();
-        end = false_clauses.end();
         while(it != end) {
-            if(clauses[*it].propagate(*it, value == FALSE)) {
+            if(clauses[*it].propagate()) {
                 return true;
             }
             ++it;
@@ -168,6 +103,7 @@ struct var {
 };
 
 vector<var> model;
+vector<int> modelStack;
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
 
@@ -214,7 +150,7 @@ int currentValueInModel(int lit) {
 
 
 void setLiteralToTrue(int lit) {
-    modelStack.push_back(change(lit));
+    modelStack.push_back(lit);
     if(lit > 0) {
         model[lit].value = TRUE;
     } else {
@@ -222,19 +158,12 @@ void setLiteralToTrue(int lit) {
     }
 }
 
-void propagateByClause(int lit, int clauseID) {
-    modelStack.push_back(change(abs(lit), clauseID, lit < 0));
-    model[abs(lit)].disable_clause(lit, clauseID, lit < 0);
-}
-
 
 bool propagateGivesConflict() {
     while(indexOfNextLitToPropagate < modelStack.size()) {
-        change c = modelStack[indexOfNextLitToPropagate++];
-        if(c.type == VALUE_CHANGE) {
-            if(model[abs(c.lit)].propagate()) {
-                return true;
-            }
+        int lit = modelStack[indexOfNextLitToPropagate++];
+        if(model[abs(lit)].propagate()) {
+            return true;
         }
     }
     return false;
@@ -243,14 +172,9 @@ bool propagateGivesConflict() {
 void backtrack() {
     uint i = modelStack.size() - 1;
     int lit = 0;
-    while(modelStack[i].lit != 0) { // 0 is the DL mark
-        change c = modelStack[i];
-        lit = c.lit;
-        if(c.type == VALUE_CHANGE) {
-            model[abs(lit)].value = UNDEF;
-        } else {
-            model[abs(lit)].enable_clause(c.clauseID, lit < 0);
-        }
+    while(modelStack[i] != 0) { // 0 is the DL mark
+        lit = modelStack[i];
+        model[abs(lit)].value = UNDEF;
         modelStack.pop_back();
         --i;
     }
@@ -266,8 +190,8 @@ void backtrack() {
 int getNextDecisionLiteral() {
     int max = 0;
     int var = 0;
-    for(uint i = 1; i <= numVars; ++i) {// stupid heuristic:
-        if(model[i].value == UNDEF) { // returns first UNDEF var, positively
+    for(uint i = 1; i <= numVars; ++i) {
+        if(model[i].value == UNDEF) {
             if(model[i].size() > max) {
                 var = i;
                 max = model[i].size();
@@ -282,29 +206,10 @@ void checkmodel() {
         if(not clauses[i].check()) {
             cout << "Error in model, clause is not satisfied:";
             clauses[i].print(i);
-            cout << "decissionLevel = " << decisionLevel << endl;
             exit(1);
         }
     }
 }
-
-
-void test_check() {
-    vector<bool> appearing_clauses(numClauses, false);
-    int total = 0;
-    for(int i = 0; i < model.size(); ++i) {
-        for(auto it = model[i].true_clauses.begin(); it != model[i].true_clauses.end(); ++it) {
-            if(not appearing_clauses[*it]) {
-                appearing_clauses[*it] = true;
-                ++total;
-            }
-        }
-    }
-    cout << "ACTIVE CLAUSES = " << total << endl;
-}
-
-
-int max_level = 0;
 
 int main(int argc, char* argv[]) {
 
@@ -334,12 +239,8 @@ int main(int argc, char* argv[]) {
     // DPLL algorithm
     while(true) {
         while(propagateGivesConflict()) {
-            if(modelStack.size() > max_level) {
-                max_level = modelStack.size();
-            }
             if(decisionLevel == 0) {
                 //cout << "UNSATISFIABLE" << endl;
-                cout << "Max level = " << max_level << endl;
                 return 10;
             }
             backtrack();
@@ -348,11 +249,10 @@ int main(int argc, char* argv[]) {
         if(decisionLit == 0) {
             checkmodel();
             //cout << "SATISFIABLE" << endl;
-            cout << "Max level = " << max_level << endl;
             return 20;
         }
         // start new decision level:
-        modelStack.push_back(change(0));  // push mark indicating new DL
+        modelStack.push_back(0);  // push mark indicating new DL
         ++indexOfNextLitToPropagate;
         ++decisionLevel;
         setLiteralToTrue(decisionLit);    // now push decisionLit on top of the mark
