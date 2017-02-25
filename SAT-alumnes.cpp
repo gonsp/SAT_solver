@@ -40,7 +40,7 @@ struct clause {
         }
         if(not someLitTrue and numUndefs == 0) {
             return true;
-        } else if(not someLitTrue and numUndefs == 1) { // conflict! all lits false
+        } else if(not someLitTrue and numUndefs == 1) {
             setLiteralToTrue(lastLitUndef);
         }
         return false;
@@ -77,19 +77,19 @@ struct var {
 
     void add_clause(int clauseID, bool negation) {
         if(negation) {
-            true_clauses.push_back(clauseID);
-        } else {
             false_clauses.push_back(clauseID);
+        } else {
+            true_clauses.push_back(clauseID);
         }
     }
 
     bool propagate() {
         list<int>::iterator it;
         list<int>::iterator end;
-        if(value == TRUE) {
+        if(value == FALSE) {
             it = true_clauses.begin();
             end = true_clauses.end();
-        } else if(value == FALSE) {
+        } else if(value == TRUE) {
             it = false_clauses.begin();
             end = false_clauses.end();
         }
@@ -199,7 +199,7 @@ int getNextDecisionLiteral() {
             return i;
         }
     }    
-    return 0; // reurns 0 when all literals are defined
+    return 0; // returns 0 when all literals are defined
 }
 
 void checkmodel() {
@@ -214,10 +214,11 @@ void checkmodel() {
 
 int main(int argc, char* argv[]) {
 
-    if(argc == 1) {
+    if(argc == 2) {
+        freopen(argv[1], "r", stdin);
+    } else {
         exit(0);
     }
-    freopen(argv[1], "r", stdin);
 
     readClauses(); // reads numVars, numClauses and clauses
     indexOfNextLitToPropagate = 0;
@@ -280,6 +281,6 @@ int main(int argc, char* argv[]) {
  * Use of variable apparition amount to select the higher value as heuristic to speed up the process
  * --------------
  * Cuando a una variable se le cambia su valor:
- *      En los sitios en los que aparezca verdadero, se podrá propagar una variable indefinida si es la unica que aparece y no hay cierta en la clausula
+ *      En los sitios en los que aparezca falso, se podrá propagar una variable indefinida si es la unica que aparece y no hay cierta en la clausula
  *      En los sitios en los que aparezca cierto, se podrá "eliminar" esa cláusula
  */
