@@ -87,6 +87,17 @@ struct clause {
         }
     }
 
+    int getUndefs() {
+        int numUndefs = 0;
+        for(int i = 0; i < literals.size(); ++i) {
+            int val = currentValueInModel(literals[i].first);
+            if(val == UNDEF) {
+                ++numUndefs;
+            }
+        }
+        return numUndefs;
+    }
+
     void print(int id) {
         cout << "ClauseID = " << id << " with vars: ";
         for(int i = 0; i < literals.size(); ++i) {
@@ -250,20 +261,16 @@ struct var {
         int i = first_true;
         while(i != -1) {
             clause_info c = true_clauses[i];
-            if(c.active) {
-                if(clauses[c.id].propagate(c.id, value == TRUE)) {
-                    return true;
-                }
+            if(clauses[c.id].propagate(c.id, value == TRUE)) {
+                return true;
             }
             i = true_clauses[i].next;
         }
         i = first_false;
         while(i != -1) {
             clause_info c = false_clauses[i];
-            if(c.active) {
-                if(clauses[c.id].propagate(c.id, value == FALSE)) {
-                    return true;
-                }
+            if(clauses[c.id].propagate(c.id, value == FALSE)) {
+                return true;
             }
             i = false_clauses[i].next;
         }
@@ -281,9 +288,24 @@ struct var {
         return false;
     }
 
+    int i_size(vector<clause_info>& var_clauses, int real_size, int first) {
+        int size = 0;
+        int i = first;
+        while(i != -1) {
+            clause_info c = var_clauses[i];
+            int numUndefs = clauses[var_clauses[i].id].getUndefs();
+            size += numUndefs == 2 ? 1 : 0;
+            i = var_clauses[i].next;
+        }
+        return size;
+    }
     //Used by the heuristic
-    int size() {
-        return true_size + false_size;
+    int size(bool sizeOfTrueClauses) {
+        if(sizeOfTrueClauses) {
+            return i_size(true_clauses, true_size, first_true);
+        } else {
+            return i_size(false_clauses, false_size, first_false);
+        }
     }
 };
 
@@ -400,19 +422,21 @@ void backtrack() {
 }
 
 
-// Heuristic forfinding the next decision literal:
 int getNextDecisionLiteral() {
-    int max = -1;
-    int var = 0;
-    for(uint i = 1; i <= numVars; ++i) {
+    int maxSize = -1;
+    int lit = 0;
+    for(int i = 1; i <= numVars; ++i) {
         if(model[i].value == UNDEF) {
-            if(model[i].size() > max) {
-                var = i;
-                max = model[i].size();
+            int true_size = model[i].size(true);
+            int false_size = model[i].size(false);
+            int aux = true_size + false_size;//max(true_size, false_size);
+            if(aux > maxSize) {
+                maxSize = aux;
+                lit = true_size > false_size ? i : -i;
             }
         }
     }
-    return var; // returns 0 when all literals are defined
+    return lit; // returns 0 when all literals are defined
 }
 
 void checkmodel() {
