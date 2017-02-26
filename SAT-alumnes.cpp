@@ -38,7 +38,6 @@ struct clause {
 
     bool propagate(int clauseID, bool lit_true) {
         if(lit_true) {
-            return false;
             bool disabled_some = false;
             for(int i = 0; i < literals.size(); ++i) {
                 int val = currentValueInModel(literals[i].first);
@@ -101,7 +100,19 @@ uint numVars;
 uint numClauses;
 vector<clause> clauses;
 
-typedef pair<int, bool> clause_info;
+struct clause_info {
+    short id;
+    bool active;
+    short next;
+    short prev;
+
+    clause_info(short id, bool active, short next, short prev) {
+        this->id = id;
+        this->active = active;
+        this->next = next;
+        this->prev = prev;
+    }
+};
 
 struct var {
     int value;
@@ -109,37 +120,48 @@ struct var {
     vector<clause_info> false_clauses;
     short true_size;
     short false_size;
+    short first_true;
+    short first_false;
 
     var() {
         value = UNDEF;
         true_size = 0;
         false_size = 0;
+        first_true = -1;
+        first_false = -1;
+    }
+
+    int add_clause(vector<clause_info>& clauses, short& first, short& size, int newID) {
+        clauses.push_back(clause_info(newID, true, size-1, -1));
+        ++size;
+        if(size > 1) {
+            clauses[size-2].next = size-1;
+        } else {
+            first = 0;
+        }
+        return size-1;
     }
 
     int add_clause(int id, bool negation) {
         if(negation) {
-            false_clauses.push_back(clause_info(id, true));
-            ++false_size;
-            return false_clauses.size()-1;
+            return add_clause(false_clauses, first_false, false_size, id);
         } else {
-            true_clauses.push_back(clause_info(id, true));
-            ++true_size;
-            return true_clauses.size()-1;
+            return add_clause(true_clauses, first_true, true_size, id);
         }
     }
 
     void disable_clause(int lit, int pos) {
         if(lit < 0) {
-            if(false_clauses[pos].second) {
-                false_clauses[pos].second = false;
+            if(false_clauses[pos].active) {
+                false_clauses[pos].active = false;
                 --false_size;
                 if(false_size == 0) {
                     setLiteralToTrue(-lit);
                 }
             }
         } else {
-            if(true_clauses[pos].second) {
-                true_clauses[pos].second = false;
+            if(true_clauses[pos].active) {
+                true_clauses[pos].active = false;
                 --true_size;
                 if(true_size == 0) {
                     setLiteralToTrue(-lit);
@@ -150,13 +172,13 @@ struct var {
 
     void enable_clause(bool negation, int pos) {
         if(negation) {
-            if(not false_clauses[pos].second) {
-                false_clauses[pos].second = true;
+            if(not false_clauses[pos].active) {
+                false_clauses[pos].active = true;
                 ++false_size;
             }
         } else {
-            if(not true_clauses[pos].second) {
-                true_clauses[pos].second = true;
+            if(not true_clauses[pos].active) {
+                true_clauses[pos].active = true;
                 ++true_size;
             }
         }
@@ -165,18 +187,18 @@ struct var {
     bool propagate() {
         for(int i = 0, total = 0; i < true_clauses.size() && total < true_size; ++i) {
             clause_info c = true_clauses[i];
-            if(c.second) {
+            if(c.active) {
                 ++total;
-                if(clauses[c.first].propagate(c.first, value == TRUE)) {
+                if(clauses[c.id].propagate(c.id, value == TRUE)) {
                     return true;
                 }
             }
         }
         for(int i = 0, total = 0; i < false_clauses.size() && total < false_size; ++i) {
             clause_info c = false_clauses[i];
-            if(c.second) {
+            if(c.active) {
                 ++total;
-                if(clauses[c.first].propagate(c.first, value == FALSE)) {
+                if(clauses[c.id].propagate(c.id, value == FALSE)) {
                     return true;
                 }
             }
