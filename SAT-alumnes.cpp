@@ -8,38 +8,59 @@ using namespace std;
 #define TRUE 1
 #define FALSE 0
 
+
+struct action {
+    int id;
+    bool is_lit;
+
+    action(int id, bool is_lit) {
+        this->id = id;
+        this->is_lit = is_lit;
+    }
+};
+vector<action> modelStack;
+
+
+typedef pair<int, int> var_info;
+
 void setLiteralToTrue(int lit);
-void setVarToPossiblePure(int var);
+void disableClause(const var_info& v);
+void enableClause(const var_info& v);
 int currentValueInModel(int lit);
 
 struct clause {
 
-    list<int> literals;
+    vector<var_info> literals;
 
-    void add_literal(int literal) {
-        literals.push_back(literal);
+    void add_literal(int literal, int pos) {
+        literals.push_back(var_info(literal, pos));
     }
 
     bool propagate(int clauseID, bool lit_true) {
         if(lit_true) {
             return false;
-            for(auto it = literals.begin(); it != literals.end(); ++it) {
-                int val = currentValueInModel(*it);
+            bool disabled_some = false;
+            for(int i = 0; i < literals.size(); ++i) {
+                int val = currentValueInModel(literals[i].first);
                 if(val == UNDEF) {
-                    setVarToPossiblePure(abs(*it));
+                    if(not disabled_some) {
+                        modelStack.push_back(action(clauseID, false));
+                    }
+                    disableClause(literals[i]);
+                    disabled_some = true;
                 }
             }
         } else {
             bool someLitTrue = false;
             int numUndefs = 0;
             int lastLitUndef = 0;
-            for(auto it = literals.begin(); not someLitTrue and it != literals.end(); ++it) {
-                int val = currentValueInModel(*it);
+            for(int i = 0; not someLitTrue and i < literals.size(); ++i) {
+                int val = currentValueInModel(literals[i].first);
                 if(val == TRUE) {
                     someLitTrue = true;
                 } else if(val == UNDEF) {
                     ++numUndefs;
-                    lastLitUndef = *it;
+                    lastLitUndef = literals[i].first;
                 }
             }
             if(not someLitTrue and numUndefs == 0) {
@@ -53,16 +74,24 @@ struct clause {
 
     bool check() {
         bool someTrue = false;
-        for(auto it = literals.begin(); not someTrue and it != literals.end(); ++it) {
-            someTrue = (currentValueInModel(*it) == TRUE);
+        for(int i = 0; not someTrue and i < literals.size(); ++i) {
+            someTrue = (currentValueInModel(literals[i].first) == TRUE);
         }
         return someTrue;
     }
 
+    void rollback() {
+        for(int i = 0; i < literals.size(); ++i) {
+            if(currentValueInModel(literals[i].first) == UNDEF) {
+                enableClause(literals[i]);
+            }
+        }
+    }
+
     void print(int id) {
         cout << "ClauseID = " << id << " with vars: ";
-        for(auto it = literals.begin(); it != literals.end(); ++it) {
-            cout << *it << " ";
+        for(int i = 0; i < literals.size(); ++i) {
+            cout << literals[i].first << " ";
         }
         cout << endl;
     }
@@ -72,93 +101,107 @@ uint numVars;
 uint numClauses;
 vector<clause> clauses;
 
+typedef pair<int, bool> clause_info;
+
 struct var {
     int value;
-    list<int> true_clauses;
-    list<int> false_clauses;
-    bool possible_pure;
-    bool positive_pure;
+    vector<clause_info> true_clauses;
+    vector<clause_info> false_clauses;
+    short true_size;
+    short false_size;
 
     var() {
         value = UNDEF;
-        possible_pure = false;
+        true_size = 0;
+        false_size = 0;
     }
 
-    void add_clause(int id, bool negation) {
+    int add_clause(int id, bool negation) {
         if(negation) {
-            false_clauses.push_back(id);
+            false_clauses.push_back(clause_info(id, true));
+            ++false_size;
+            return false_clauses.size()-1;
         } else {
-            true_clauses.push_back(id);
+            true_clauses.push_back(clause_info(id, true));
+            ++true_size;
+            return true_clauses.size()-1;
+        }
+    }
+
+    void disable_clause(int lit, int pos) {
+        if(lit < 0) {
+            if(false_clauses[pos].second) {
+                false_clauses[pos].second = false;
+                --false_size;
+                if(false_size == 0) {
+                    setLiteralToTrue(-lit);
+                }
+            }
+        } else {
+            if(true_clauses[pos].second) {
+                true_clauses[pos].second = false;
+                --true_size;
+                if(true_size == 0) {
+                    setLiteralToTrue(-lit);
+                }
+            }
+        }
+    }
+
+    void enable_clause(bool negation, int pos) {
+        if(negation) {
+            if(not false_clauses[pos].second) {
+                false_clauses[pos].second = true;
+                ++false_size;
+            }
+        } else {
+            if(not true_clauses[pos].second) {
+                true_clauses[pos].second = true;
+                ++true_size;
+            }
         }
     }
 
     bool propagate() {
-        list<int>::iterator it;
-        list<int>::iterator end;
-        it = true_clauses.begin();
-        end = true_clauses.end();
-        while(it != end) {
-            if(clauses[*it].propagate(*it, value == TRUE)) {
-                return true;
+        for(int i = 0, total = 0; i < true_clauses.size() && total < true_size; ++i) {
+            clause_info c = true_clauses[i];
+            if(c.second) {
+                ++total;
+                if(clauses[c.first].propagate(c.first, value == TRUE)) {
+                    return true;
+                }
             }
-            ++it;
         }
-        it = false_clauses.begin();
-        end = false_clauses.end();
-        while(it != end) {
-            if(clauses[*it].propagate(*it, value == FALSE)) {
-                return true;
+        for(int i = 0, total = 0; i < false_clauses.size() && total < false_size; ++i) {
+            clause_info c = false_clauses[i];
+            if(c.second) {
+                ++total;
+                if(clauses[c.first].propagate(c.first, value == FALSE)) {
+                    return true;
+                }
             }
-            ++it;
         }
         return false;
     }
 
-    bool is_initially_pure() {
+    bool check_pure(int id) {
         if(false_clauses.size() == 0) {
-            positive_pure = false;
+            setLiteralToTrue(id);
             return true;
         } else if(true_clauses.size() == 0) {
-            positive_pure = true;
+            setLiteralToTrue(-id);
             return true;
         }
         return false;
-    }
-
-    bool is_pure() {
-        auto it = true_clauses.begin();
-        auto end = true_clauses.end();
-        while(it != end) {
-            if(not clauses[*it].check()) {
-                break;
-            }
-            ++it;
-        }
-        if(it == end) {
-            positive_pure = true;
-            return true;
-        } else {
-            it = false_clauses.begin();
-            end = false_clauses.end();
-            while(it != end) {
-                if(not clauses[*it].check()) {
-                    possible_pure = false;
-                    return false;
-                }
-                ++it;
-            }
-            positive_pure = false;
-            return true;
-        }
     }
 
     int size() {
-        return true_clauses.size() + false_clauses.size();
+        return true_size + false_size;
     }
 };
 
 vector<var> model;
-vector<int> modelStack;
+
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
 
@@ -180,12 +223,13 @@ void readClauses() {
     for(uint id = 0; id < numClauses; ++id) {
         int lit;
         while(cin >> lit and lit != 0) {
-            clauses[id].add_literal(lit);
+            int pos;
             if(lit < 0) {
-                model[-lit].add_clause(id, true);
+                pos = model[-lit].add_clause(id, true);
             } else {
-                model[lit].add_clause(id, false);
+                pos = model[lit].add_clause(id, false);
             }
+            clauses[id].add_literal(lit, pos);
         }
     }
 }
@@ -205,7 +249,7 @@ int currentValueInModel(int lit) {
 
 
 void setLiteralToTrue(int lit) {
-    modelStack.push_back(lit);
+    modelStack.push_back(action(lit, true));
     if(lit > 0) {
         model[lit].value = TRUE;
     } else {
@@ -213,28 +257,19 @@ void setLiteralToTrue(int lit) {
     }
 }
 
-
-void setVarToPossiblePure(int varID) {
-    model[varID].possible_pure = true;
+void disableClause(const var_info& v) {
+    model[abs(v.first)].disable_clause(v.first, v.second);
 }
 
+void enableClause(const var_info& v) {
+    model[abs(v.first)].enable_clause(v.first < 0, v.second);
+}
 
 bool propagateGivesConflict() {
-    while(indexOfNextLitToPropagate <= modelStack.size()) {
-        if(indexOfNextLitToPropagate == modelStack.size()) {
-            for(int i = 1; i < model.size(); ++i) {
-                if(model[i].value == UNDEF && model[i].possible_pure) {
-                    if(model[i].is_pure()) {
-                        setLiteralToTrue(model[i].positive_pure ? -i: i);
-                        model[i].possible_pure = false;
-                    }
-                }
-            }
-            if(indexOfNextLitToPropagate == modelStack.size()) {
-                break;
-            }
-        } else {
-            int lit = modelStack[indexOfNextLitToPropagate++];
+    while(indexOfNextLitToPropagate < modelStack.size()) {
+        action a = modelStack[indexOfNextLitToPropagate++];
+        if(a.is_lit) {
+            int lit = a.id;
             if(model[abs(lit)].propagate()) {
                 return true;
             }
@@ -243,12 +278,30 @@ bool propagateGivesConflict() {
     return false;
 }
 
+
+
+int countActiveClauses() {
+    int total = 0;
+    for(int i = 0; i < model.size(); ++i) {
+        total += model[i].true_size;
+        total += model[i].false_size;
+    }
+    return total;
+}
+
+
+
 void backtrack() {
     uint i = modelStack.size() - 1;
     int lit = 0;
-    while(modelStack[i] != 0) { // 0 is the DL mark
-        lit = modelStack[i];
-        model[abs(lit)].value = UNDEF;
+    while(!modelStack[i].is_lit || modelStack[i].id != 0) { // 0 is the DL mark
+        action a = modelStack[i];
+        if(a.is_lit) {
+            lit = a.id;
+            model[abs(lit)].value = UNDEF;
+        } else {
+            clauses[a.id].rollback();
+        }
         modelStack.pop_back();
         --i;
     }
@@ -257,15 +310,12 @@ void backtrack() {
     --decisionLevel;
     indexOfNextLitToPropagate = modelStack.size();
     setLiteralToTrue(-lit);  // reverse last decision
-    for(int i = 1; i < model.size(); ++i) {
-        model[i].possible_pure = false;
-    }
 }
 
 
 // Heuristic forfinding the next decision literal:
 int getNextDecisionLiteral() {
-    int max = 0;
+    int max = -1;
     int var = 0;
     for(uint i = 1; i <= numVars; ++i) {
         if(model[i].value == UNDEF) {
@@ -303,7 +353,7 @@ int main(int argc, char* argv[]) {
     // Take care of initial unit clauses, if any
     for(uint i = 0; i < numClauses; ++i) {
         if(clauses[i].literals.size() == 1) {
-            int lit = clauses[i].literals.front();
+            int lit = clauses[i].literals.front().first;
             int val = currentValueInModel(lit);
             if(val == FALSE) {
                 //cout << "UNSATISFIABLE" << endl;
@@ -315,9 +365,7 @@ int main(int argc, char* argv[]) {
     }
 
     for(int i = 1; i < model.size(); ++i) {
-        if(model[i].is_initially_pure()) {
-            model[i].possible_pure = true;
-        }
+        model[i].check_pure(i);
     }
 
     // DPLL algorithm
@@ -336,7 +384,7 @@ int main(int argc, char* argv[]) {
             return 20;
         }
         // start new decision level:
-        modelStack.push_back(0);  // push mark indicating new DL
+        modelStack.push_back(action(0, true));  // push mark indicating new DL
         ++indexOfNextLitToPropagate;
         ++decisionLevel;
         setLiteralToTrue(decisionLit);    // now push decisionLit on top of the mark
