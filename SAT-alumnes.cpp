@@ -9,6 +9,7 @@ using namespace std;
 #define FALSE 0
 
 void setLiteralToTrue(int lit);
+void setVarToPossiblePure(int var);
 int currentValueInModel(int lit);
 
 struct clause {
@@ -19,23 +20,33 @@ struct clause {
         literals.push_back(literal);
     }
 
-    bool propagate() {
-        bool someLitTrue = false;
-        int numUndefs = 0;
-        int lastLitUndef = 0;
-        for(auto it = literals.begin(); not someLitTrue and it != literals.end(); ++it) {
-            int val = currentValueInModel(*it);
-            if(val == TRUE) {
-                someLitTrue = true;
-            } else if(val == UNDEF) {
-                ++numUndefs;
-                lastLitUndef = *it;
+    bool propagate(int clauseID, bool lit_true) {
+        if(lit_true) {
+            return false;
+            for(auto it = literals.begin(); it != literals.end(); ++it) {
+                int val = currentValueInModel(*it);
+                if(val == UNDEF) {
+                    setVarToPossiblePure(abs(*it));
+                }
             }
-        }
-        if(not someLitTrue and numUndefs == 0) {
-            return true;
-        } else if(not someLitTrue and numUndefs == 1) {
-            setLiteralToTrue(lastLitUndef);
+        } else {
+            bool someLitTrue = false;
+            int numUndefs = 0;
+            int lastLitUndef = 0;
+            for(auto it = literals.begin(); not someLitTrue and it != literals.end(); ++it) {
+                int val = currentValueInModel(*it);
+                if(val == TRUE) {
+                    someLitTrue = true;
+                } else if(val == UNDEF) {
+                    ++numUndefs;
+                    lastLitUndef = *it;
+                }
+            }
+            if(not someLitTrue and numUndefs == 0) {
+                return true;
+            } else if(not someLitTrue and numUndefs == 1) {
+                setLiteralToTrue(lastLitUndef);
+            }
         }
         return false;
     }
@@ -65,9 +76,12 @@ struct var {
     int value;
     list<int> true_clauses;
     list<int> false_clauses;
+    bool possible_pure;
+    bool positive_pure;
 
     var() {
         value = UNDEF;
+        possible_pure = false;
     }
 
     void add_clause(int id, bool negation) {
@@ -81,15 +95,18 @@ struct var {
     bool propagate() {
         list<int>::iterator it;
         list<int>::iterator end;
-        if(value == FALSE) {
-            it = true_clauses.begin();
-            end = true_clauses.end();
-        } else if(value == TRUE) {
-            it = false_clauses.begin();
-            end = false_clauses.end();
-        }
+        it = true_clauses.begin();
+        end = true_clauses.end();
         while(it != end) {
-            if(clauses[*it].propagate()) {
+            if(clauses[*it].propagate(*it, value == TRUE)) {
+                return true;
+            }
+            ++it;
+        }
+        it = false_clauses.begin();
+        end = false_clauses.end();
+        while(it != end) {
+            if(clauses[*it].propagate(*it, value == FALSE)) {
                 return true;
             }
             ++it;
@@ -97,8 +114,46 @@ struct var {
         return false;
     }
 
+    bool is_initially_pure() {
+        if(false_clauses.size() == 0) {
+            positive_pure = false;
+            return true;
+        } else if(true_clauses.size() == 0) {
+            positive_pure = true;
+            return true;
+        }
+        return false;
+    }
+
+    bool is_pure() {
+        auto it = true_clauses.begin();
+        auto end = true_clauses.end();
+        while(it != end) {
+            if(not clauses[*it].check()) {
+                break;
+            }
+            ++it;
+        }
+        if(it == end) {
+            positive_pure = true;
+            return true;
+        } else {
+            it = false_clauses.begin();
+            end = false_clauses.end();
+            while(it != end) {
+                if(not clauses[*it].check()) {
+                    possible_pure = false;
+                    return false;
+                }
+                ++it;
+            }
+            positive_pure = false;
+            return true;
+        }
+    }
+
     int size() {
-        return true_clauses.size();// + false_clauses.size();
+        return true_clauses.size() + false_clauses.size();
     }
 };
 
@@ -159,11 +214,30 @@ void setLiteralToTrue(int lit) {
 }
 
 
+void setVarToPossiblePure(int varID) {
+    model[varID].possible_pure = true;
+}
+
+
 bool propagateGivesConflict() {
-    while(indexOfNextLitToPropagate < modelStack.size()) {
-        int lit = modelStack[indexOfNextLitToPropagate++];
-        if(model[abs(lit)].propagate()) {
-            return true;
+    while(indexOfNextLitToPropagate <= modelStack.size()) {
+        if(indexOfNextLitToPropagate == modelStack.size()) {
+            for(int i = 1; i < model.size(); ++i) {
+                if(model[i].value == UNDEF && model[i].possible_pure) {
+                    if(model[i].is_pure()) {
+                        setLiteralToTrue(model[i].positive_pure ? -i: i);
+                        model[i].possible_pure = false;
+                    }
+                }
+            }
+            if(indexOfNextLitToPropagate == modelStack.size()) {
+                break;
+            }
+        } else {
+            int lit = modelStack[indexOfNextLitToPropagate++];
+            if(model[abs(lit)].propagate()) {
+                return true;
+            }
         }
     }
     return false;
@@ -183,6 +257,9 @@ void backtrack() {
     --decisionLevel;
     indexOfNextLitToPropagate = modelStack.size();
     setLiteralToTrue(-lit);  // reverse last decision
+    for(int i = 1; i < model.size(); ++i) {
+        model[i].possible_pure = false;
+    }
 }
 
 
@@ -236,6 +313,13 @@ int main(int argc, char* argv[]) {
             }
         }
     }
+
+    for(int i = 1; i < model.size(); ++i) {
+        if(model[i].is_initially_pure()) {
+            model[i].possible_pure = true;
+        }
+    }
+
     // DPLL algorithm
     while(true) {
         while(propagateGivesConflict()) {
