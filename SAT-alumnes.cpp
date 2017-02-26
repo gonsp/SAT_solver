@@ -27,6 +27,8 @@ void setLiteralToTrue(int lit);
 void disableClause(const var_info& v);
 void enableClause(const var_info& v);
 int currentValueInModel(int lit);
+void registerConflict(int lit);
+int totalConflicts = 1;
 
 struct clause {
 
@@ -63,6 +65,10 @@ struct clause {
                 }
             }
             if(not someLitTrue and numUndefs == 0) {
+                for(int i = 0; i < literals.size(); ++i) {
+                    registerConflict(literals[i].first);
+                }
+                totalConflicts += 3;
                 return true;
             } else if(not someLitTrue and numUndefs == 1) {
                 setLiteralToTrue(lastLitUndef);
@@ -133,6 +139,8 @@ struct var {
     int false_size;
     int first_true;
     int first_false;
+    float true_conflicts;
+    float false_conflicts;
 
     var() {
         value = UNDEF;
@@ -140,6 +148,8 @@ struct var {
         false_size = 0;
         first_true = -1;
         first_false = -1;
+        true_conflicts = 0;
+        false_conflicts = 0;
     }
 
     int i_add_clause(vector<clause_info>& clauses, int& first, int& size, int newID) {
@@ -299,12 +309,23 @@ struct var {
         }
         return size;
     }
+
     //Used by the heuristic
-    int size(bool sizeOfTrueClauses) {
+    float weight(bool sizeOfTrueClauses) {
         if(sizeOfTrueClauses) {
-            return i_size(true_clauses, true_size, first_true);
+            return i_size(true_clauses, true_size, first_true)*(true_conflicts/totalConflicts);
+            //return true_size*(true_conflicts/totalConflicts);
         } else {
-            return i_size(false_clauses, false_size, first_false);
+            return i_size(false_clauses, false_size, first_false)*(false_conflicts/totalConflicts);
+            //return false_size*(false_conflicts/totalConflicts);
+        }
+    }
+
+    void addConflict(bool negation) {
+        if(negation) {
+            ++true_conflicts;
+        } else {
+            ++false_conflicts;
         }
     }
 };
@@ -374,6 +395,10 @@ void enableClause(const var_info& v) {
     model[abs(v.first)].enable_clause(v.first < 0, v.second);
 }
 
+void registerConflict(int lit) {
+    model[abs(lit)].addConflict(lit < 0);
+}
+
 bool propagateGivesConflict() {
     while(indexOfNextLitToPropagate < modelStack.size()) {
         action a = modelStack[indexOfNextLitToPropagate++];
@@ -423,15 +448,15 @@ void backtrack() {
 
 
 int getNextDecisionLiteral() {
-    int maxSize = -1;
+    float maxWeight = -1;
     int lit = 0;
     for(int i = 1; i <= numVars; ++i) {
         if(model[i].value == UNDEF) {
-            int true_size = model[i].size(true);
-            int false_size = model[i].size(false);
-            int aux = true_size + false_size;//max(true_size, false_size);
-            if(aux > maxSize) {
-                maxSize = aux;
+            float true_size = model[i].weight(true);
+            float false_size = model[i].weight(false);
+            float weight = true_size + false_size;//max(true_size, false_size);
+            if(weight > maxWeight) {
+                maxWeight = weight;
                 lit = true_size > false_size ? i : -i;
             }
         }
