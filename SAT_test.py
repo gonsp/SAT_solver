@@ -31,10 +31,7 @@ def main():
             if result.satisfiable == (code == 20):
                 print(result.name, "OK", end=" ----- ")
                 time = act_time - prev_time
-                if result.time < time:
-                    print("OUT OF TIME:", result.time, "->", round(act_time - prev_time, 2))
-                else:
-                    print("IN TIME!")
+                print(result.time, "->", round(act_time - prev_time, 2), "!!!!!!!!!!!!!!!!!!!!" if result.time > time else "")
             else:
                 print(result.name, "INCORRECT")
         prev_time = act_time
