@@ -101,12 +101,12 @@ uint numClauses;
 vector<clause> clauses;
 
 struct clause_info {
-    short id;
+    int id;
     bool active;
-    short next;
-    short prev;
+    int next;
+    int prev;
 
-    clause_info(short id, bool active, short next, short prev) {
+    clause_info(int id, bool active, int prev, int next) {
         this->id = id;
         this->active = active;
         this->next = next;
@@ -118,10 +118,10 @@ struct var {
     int value;
     vector<clause_info> true_clauses;
     vector<clause_info> false_clauses;
-    short true_size;
-    short false_size;
-    short first_true;
-    short first_false;
+    int true_size;
+    int false_size;
+    int first_true;
+    int first_false;
 
     var() {
         value = UNDEF;
@@ -131,7 +131,7 @@ struct var {
         first_false = -1;
     }
 
-    int add_clause(vector<clause_info>& clauses, short& first, short& size, int newID) {
+    int i_add_clause(vector<clause_info>& clauses, int& first, int& size, int newID) {
         clauses.push_back(clause_info(newID, true, size-1, -1));
         ++size;
         if(size > 1) {
@@ -144,64 +144,128 @@ struct var {
 
     int add_clause(int id, bool negation) {
         if(negation) {
-            return add_clause(false_clauses, first_false, false_size, id);
+            return i_add_clause(false_clauses, first_false, false_size, id);
         } else {
-            return add_clause(true_clauses, first_true, true_size, id);
+            return i_add_clause(true_clauses, first_true, true_size, id);
+        }
+    }
+
+    void i_disable_clause(vector<clause_info>& clauses, int pos, int& first, int& size) {
+        if(clauses[pos].active) {
+            clauses[pos].active = false;
+            --size;
+            int prev = clauses[pos].prev;
+            int next = clauses[pos].next;
+            if(prev != -1) {
+                clauses[prev].next = next;
+            }
+            if(next != -1) {
+                clauses[next].prev = prev;
+            }
+            if(first == pos) {
+                first = next;
+            }
         }
     }
 
     void disable_clause(int lit, int pos) {
         if(lit < 0) {
-            if(false_clauses[pos].active) {
-                false_clauses[pos].active = false;
-                --false_size;
-                if(false_size == 0) {
-                    setLiteralToTrue(-lit);
-                }
+            i_disable_clause(false_clauses, pos, first_false, false_size);
+            if(false_size == 0) {
+                setLiteralToTrue(-lit);
             }
         } else {
-            if(true_clauses[pos].active) {
-                true_clauses[pos].active = false;
-                --true_size;
-                if(true_size == 0) {
-                    setLiteralToTrue(-lit);
+            i_disable_clause(true_clauses, pos, first_true, true_size);
+            if(true_size == 0) {
+                setLiteralToTrue(-lit);
+            }
+        }
+    }
+
+    void check_clauses_integrity(vector<clause_info>& clauses, int size, int first) {
+        int k = -1;
+        for(int i = 0; i < clauses.size(); ++i) {
+            if(clauses[i].active) {
+                if(first != i) {
+                    cout << "Integrity error: first" << endl;
+                    exit(1);
+                }
+                k = i;
+                break;
+            }
+        }
+        int prev = -1;
+        while(k != -1) {
+            if(clauses[k].prev != prev) {
+                cout << "Integrity error: prev" << endl;
+                exit(1);
+            }
+            prev = k;
+            k = clauses[k].next;
+            --size;
+        }
+        if(size != 0) {
+            cout << "Integrity error: size" << endl;
+            exit(1);
+        }
+    }
+
+    void i_enable_clause(vector<clause_info>& clauses, int pos, int& first, int& size) {
+        if(not clauses[pos].active) {
+            if(first > pos) {
+                clauses[pos].prev = -1;
+                clauses[pos].next = first;
+                clauses[first].prev = pos;
+                first = pos;
+            } else if(first == -1) {
+                first = pos;
+                clauses[pos].prev = -1;
+                clauses[pos].next = -1;
+            } else {
+                int k = pos-1;
+                while(not clauses[k].active) {
+                    --k;
+                }
+                clauses[pos].prev = k;
+                clauses[pos].next = clauses[k].next;
+                clauses[k].next = pos;
+                if(clauses[pos].next != -1) {
+                    clauses[clauses[pos].next].prev = pos;
                 }
             }
+            clauses[pos].active = true;
+            ++size;
         }
     }
 
     void enable_clause(bool negation, int pos) {
         if(negation) {
-            if(not false_clauses[pos].active) {
-                false_clauses[pos].active = true;
-                ++false_size;
-            }
+            i_enable_clause(false_clauses, pos, first_false, false_size);
         } else {
-            if(not true_clauses[pos].active) {
-                true_clauses[pos].active = true;
-                ++true_size;
-            }
+            i_enable_clause(true_clauses, pos, first_true, true_size);
         }
     }
 
     bool propagate() {
-        for(int i = 0, total = 0; i < true_clauses.size() && total < true_size; ++i) {
+        int i = first_true;
+        while(i != -1) {
             clause_info c = true_clauses[i];
             if(c.active) {
-                ++total;
                 if(clauses[c.id].propagate(c.id, value == TRUE)) {
                     return true;
                 }
             }
+            i = true_clauses[i].next;
         }
-        for(int i = 0, total = 0; i < false_clauses.size() && total < false_size; ++i) {
+        i = first_false;
+        while(i != -1) {
             clause_info c = false_clauses[i];
             if(c.active) {
-                ++total;
                 if(clauses[c.id].propagate(c.id, value == FALSE)) {
                     return true;
                 }
             }
+            i = false_clauses[i].next;
         }
         return false;
     }
@@ -217,6 +281,7 @@ struct var {
         return false;
     }
 
+    //Used by the heuristic
     int size() {
         return true_size + false_size;
     }
