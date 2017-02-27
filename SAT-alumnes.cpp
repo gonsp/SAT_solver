@@ -142,6 +142,9 @@ struct var {
     float true_conflicts;
     float false_conflicts;
 
+    int next;
+    int prev;
+
     var() {
         value = UNDEF;
         true_size = 0;
@@ -331,7 +334,7 @@ struct var {
 };
 
 vector<var> model;
-
+int first_undef;
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
 
@@ -348,6 +351,13 @@ void readClauses() {
     string aux;
     cin >> aux >> numVars >> numClauses;
     model.resize(numVars + 1, var());
+    for(int i = 1; i < model.size(); ++i) {
+        model[i].prev = i-1;
+        model[i].next = i+1;
+    }
+    first_undef = 1;
+    model[model.size()-1].next = 0;
+
     clauses.resize(numClauses);
     // Read clauses
     for(uint id = 0; id < numClauses; ++id) {
@@ -385,6 +395,44 @@ void setLiteralToTrue(int lit) {
     } else {
         model[-lit].value = FALSE;
     }
+    int var = abs(lit);
+    int prev = model[var].prev;
+    int next = model[var].next;
+    if(prev != 0) {
+        model[prev].next = next;
+    }
+    if(next != 0) {
+        model[next].prev = prev;
+    }
+    if(first_undef == var) {
+        first_undef = next;
+    }
+}
+
+void setLiteralToUndef(int lit) {
+    int var = abs(lit);
+    model[var].value = UNDEF;
+    if(first_undef > var) {
+        model[var].prev = 0;
+        model[var].next = first_undef;
+        model[first_undef].prev = var;
+        first_undef = var;
+    } else if(first_undef == 0) {
+        first_undef = var;
+        model[var].prev = 0;
+        model[var].next = 0;
+    } else {
+        int k = var-1;
+        while(k > 0 && model[k].value != UNDEF) {
+            --k;
+        }
+        model[var].prev = k;
+        model[var].next = model[k].next;
+        model[k].next = var;
+        if(model[var].next != 0) {
+            model[model[var].next].prev = var;
+        }
+    }
 }
 
 void disableClause(const var_info& v) {
@@ -412,19 +460,6 @@ bool propagateGivesConflict() {
     return false;
 }
 
-
-
-int countActiveClauses() {
-    int total = 0;
-    for(int i = 0; i < model.size(); ++i) {
-        total += model[i].true_size;
-        total += model[i].false_size;
-    }
-    return total;
-}
-
-
-
 void backtrack() {
     uint i = modelStack.size() - 1;
     int lit = 0;
@@ -432,7 +467,7 @@ void backtrack() {
         action a = modelStack[i];
         if(a.is_lit) {
             lit = a.id;
-            model[abs(lit)].value = UNDEF;
+            setLiteralToUndef(lit);
         } else {
             clauses[a.id].rollback();
         }
@@ -450,16 +485,16 @@ void backtrack() {
 int getNextDecisionLiteral() {
     float maxWeight = -1;
     int lit = 0;
-    for(int i = 1; i <= numVars; ++i) {
-        if(model[i].value == UNDEF) {
-            float true_size = model[i].weight(true);
-            float false_size = model[i].weight(false);
-            float weight = true_size + false_size;//max(true_size, false_size);
-            if(weight > maxWeight) {
-                maxWeight = weight;
-                lit = true_size > false_size ? i : -i;
-            }
+    int i = first_undef;
+    while(i != 0) {
+        float true_size = model[i].weight(true);
+        float false_size = model[i].weight(false);
+        float weight = true_size + false_size;//max(true_size, false_size);
+        if(weight > maxWeight) {
+            maxWeight = weight;
+            lit = true_size > false_size ? i : -i;
         }
+        i = model[i].next;
     }
     return lit; // returns 0 when all literals are defined
 }
