@@ -563,22 +563,26 @@ int main(int argc, char* argv[]) {
 }
 
 /*
- * Unit literal search
- * Unit literal propagation
- * Unit literal elimination
+ * Done - Unit literal search
+ * Done - Unit literal propagation
+ * Done - Unit literal elimination
  *
- * Pure literal search
- * Pure literal propagation
- * Pure literal elimination
+ * Done - Pure literal search
+ * Done - Pure literal propagation
+ * Done - Pure literal elimination
  *
- * Clauses size sorting (?)
+ * Discarded - Clauses size sorting (?)
  *
- * List of clauses in which a literal appears to speed up the propagation and clauses elimination
+ * Done - List of clauses in which a literal appears to speed up the propagation and clauses elimination
  *
  *
- * Use of variable apparition amount to select the higher value as heuristic to speed up the process
+ * Done & improved - Use of variable apparition amount to select the higher value as heuristic to speed up the process
  * --------------
  * Cuando a una variable se le cambia su valor:
- *      En los sitios en los que aparezca falso, se podrá propagar una variable indefinida si es la unica que aparece y no hay cierta en la clausula
- *      En los sitios en los que aparezca cierto, se podrá "eliminar" esa cláusula
+ * Done - En los sitios en los que aparezca falso, se podrá propagar una variable indefinida si es la unica que aparece y no hay cierta en la clausula
+ * Done - En los sitios en los que aparezca cierto, se podrá "eliminar" esa cláusula
+ 
+ * Done - List over vector on clauses' vars
+ * Done - List over vector on model (for undefined vars)
+ * TODO - Alternative to ^. Use list and remove when var is not undefined.
  */
