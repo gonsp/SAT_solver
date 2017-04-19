@@ -513,8 +513,6 @@ int main(int argc, char* argv[]) {
 
     if(argc > 1) {
         freopen(argv[1], "r", stdin);
-    } else {
-        exit(0);
     }
 
     readClauses(); // reads numVars, numClauses and clauses
