@@ -68,7 +68,7 @@ struct clause {
                 for(int i = 0; i < literals.size(); ++i) {
                     registerConflict(literals[i].first);
                 }
-                totalConflicts += 3;
+                totalConflicts += literals.size();
                 return true;
             } else if(not someLitTrue and numUndefs == 1) {
                 setLiteralToTrue(lastLitUndef);
@@ -206,34 +206,6 @@ struct var {
         }
     }
 
-    void check_clauses_integrity(vector<clause_info>& clauses, int size, int first) {
-        int k = -1;
-        for(int i = 0; i < clauses.size(); ++i) {
-            if(clauses[i].active) {
-                if(first != i) {
-                    cout << "Integrity error: first" << endl;
-                    exit(1);
-                }
-                k = i;
-                break;
-            }
-        }
-        int prev = -1;
-        while(k != -1) {
-            if(clauses[k].prev != prev) {
-                cout << "Integrity error: prev" << endl;
-                exit(1);
-            }
-            prev = k;
-            k = clauses[k].next;
-            --size;
-        }
-        if(size != 0) {
-            cout << "Integrity error: size" << endl;
-            exit(1);
-        }
-    }
-
     void i_enable_clause(vector<clause_info>& clauses, int pos, int& first, int& size) {
         if(not clauses[pos].active) {
             if(first > pos) {
@@ -306,7 +278,7 @@ struct var {
         int i = first;
         while(i != -1) {
             clause_info c = var_clauses[i];
-            int numUndefs = clauses[var_clauses[i].id].getUndefs();
+            int numUndefs = clauses[c.id].getUndefs();
             size += numUndefs == 2 ? 1 : 0;
             i = var_clauses[i].next;
         }
@@ -317,10 +289,8 @@ struct var {
     float weight(bool sizeOfTrueClauses) {
         if(sizeOfTrueClauses) {
             return i_size(true_clauses, true_size, first_true)*(true_conflicts/totalConflicts);
-            //return true_size*(true_conflicts/totalConflicts);
         } else {
             return i_size(false_clauses, false_size, first_false)*(false_conflicts/totalConflicts);
-            //return false_size*(false_conflicts/totalConflicts);
         }
     }
 
@@ -489,7 +459,7 @@ int getNextDecisionLiteral() {
     while(i != 0) {
         float true_size = model[i].weight(true);
         float false_size = model[i].weight(false);
-        float weight = true_size + false_size;//max(true_size, false_size);
+        float weight = true_size + false_size;
         if(weight > maxWeight) {
             maxWeight = weight;
             lit = true_size > false_size ? i : -i;
@@ -582,5 +552,10 @@ int main(int argc, char* argv[]) {
  
  * Done - List over vector on clauses' vars
  * Done - List over vector on model (for undefined vars)
+ *
+ * TODO - Try to save the linear traverse over clausules in each var to compute it's heuristic (weight)
+ * TODO - Use unordered map instead of list for choosing next literal
  * TODO - Alternative to ^. Use list and remove when var is not undefined.
+ *
+ * TODO - USE A HEAP TO GET THE MOST CONFLICTIVE VAR (or vars). Counting only
  */
