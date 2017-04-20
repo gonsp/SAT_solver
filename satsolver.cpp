@@ -8,14 +8,19 @@ using namespace std;
 #define TRUE 1
 #define FALSE 0
 
+enum action_type {
+    VAR_PROPAGATION,
+    CLAUSE_DELETION,
+    WEIGHT_UPDATE
+};
 
 struct action {
     int id;
-    bool is_lit;
+    action_type type;
 
-    action(int id, bool is_lit) {
+    action(int id, action_type type) {
         this->id = id;
-        this->is_lit = is_lit;
+        this->type = type;
     }
 };
 vector<action> modelStack;
@@ -28,6 +33,7 @@ void disableClause(const var_info& v);
 void enableClause(const var_info& v);
 int currentValueInModel(int lit);
 void registerConflict(int lit);
+void incrementWeight(int lit);
 int totalConflicts = 1;
 
 struct clause {
@@ -45,7 +51,7 @@ struct clause {
                 int val = currentValueInModel(literals[i].first);
                 if(val == UNDEF) {
                     if(not disabled_some) {
-                        modelStack.push_back(action(clauseID, false));
+                        modelStack.push_back(action(clauseID, CLAUSE_DELETION));
                     }
                     disableClause(literals[i]);
                     disabled_some = true;
@@ -55,7 +61,7 @@ struct clause {
             bool someLitTrue = false;
             int numUndefs = 0;
             int lastLitUndef = 0;
-            for(int i = 0; not someLitTrue and i < literals.size(); ++i) {
+            for(int i = 0; i < literals.size(); ++i) {
                 int val = currentValueInModel(literals[i].first);
                 if(val == TRUE) {
                     someLitTrue = true;
@@ -64,14 +70,24 @@ struct clause {
                     lastLitUndef = literals[i].first;
                 }
             }
-            if(not someLitTrue and numUndefs == 0) {
-                for(int i = 0; i < literals.size(); ++i) {
-                    registerConflict(literals[i].first);
+            if(not someLitTrue) {
+                if(numUndefs == 0) { //Conflict
+                    for(int i = 0; i < literals.size(); ++i) {
+                        registerConflict(literals[i].first);
+                    }
+                    totalConflicts += literals.size();
+                    return true;
+                } else if(numUndefs == 1) { //Propagation
+                    setLiteralToTrue(lastLitUndef);
+                } else if(numUndefs == 2) { //Weight increment
+                    for(int i = 0; i < literals.size(); ++i) {
+                        int lit = literals[i].first;
+                        if(currentValueInModel(lit) == UNDEF) {
+                            modelStack.push_back(action(lit, WEIGHT_UPDATE));
+                            incrementWeight(lit);
+                        }
+                    }
                 }
-                totalConflicts += literals.size();
-                return true;
-            } else if(not someLitTrue and numUndefs == 1) {
-                setLiteralToTrue(lastLitUndef);
             }
         }
         return false;
@@ -141,6 +157,8 @@ struct var {
     int first_false;
     float true_conflicts;
     float false_conflicts;
+    int true_weight;
+    int false_weight;
 
     int next;
     int prev;
@@ -153,6 +171,8 @@ struct var {
         first_false = -1;
         true_conflicts = 0;
         false_conflicts = 0;
+        true_weight = 0;
+        false_weight = 0;
     }
 
     int i_add_clause(vector<clause_info>& clauses, int& first, int& size, int newID) {
@@ -273,7 +293,7 @@ struct var {
         return false;
     }
 
-    int i_size(vector<clause_info>& var_clauses, int real_size, int first) {
+    /*int i_size(vector<clause_info>& var_clauses, int real_size, int first) {
         int size = 0;
         int i = first;
         while(i != -1) {
@@ -283,14 +303,16 @@ struct var {
             i = var_clauses[i].next;
         }
         return size;
-    }
+    }*/
 
     //Used by the heuristic
     float weight(bool sizeOfTrueClauses) {
         if(sizeOfTrueClauses) {
-            return i_size(true_clauses, true_size, first_true)*(true_conflicts/totalConflicts);
+            return true_weight*(true_conflicts/totalConflicts);
+            //return i_size(true_clauses, true_size, first_true)*(true_conflicts/totalConflicts);
         } else {
-            return i_size(false_clauses, false_size, first_false)*(false_conflicts/totalConflicts);
+            return false_weight*(false_conflicts/totalConflicts);
+            //return i_size(false_clauses, false_size, first_false)*(false_conflicts/totalConflicts);
         }
     }
 
@@ -299,6 +321,18 @@ struct var {
             ++true_conflicts;
         } else {
             ++false_conflicts;
+        }
+    }
+
+    void updateWeight(bool negation, bool increment) {
+        int diff = 1;
+        if(not increment) {
+            diff = -1;
+        }
+        if(negation) {
+            true_weight += diff;
+        } else {
+            false_weight += diff;
         }
     }
 };
@@ -359,7 +393,7 @@ int currentValueInModel(int lit) {
 
 
 void setLiteralToTrue(int lit) {
-    modelStack.push_back(action(lit, true));
+    modelStack.push_back(action(lit, VAR_PROPAGATION));
     if(lit > 0) {
         model[lit].value = TRUE;
     } else {
@@ -417,10 +451,14 @@ void registerConflict(int lit) {
     model[abs(lit)].addConflict(lit < 0);
 }
 
+void incrementWeight(int lit) {
+    model[abs(lit)].updateWeight(lit < 0, true);
+}
+
 bool propagateGivesConflict() {
     while(indexOfNextLitToPropagate < modelStack.size()) {
         action a = modelStack[indexOfNextLitToPropagate++];
-        if(a.is_lit) {
+        if(a.type == VAR_PROPAGATION) {
             int lit = a.id;
             if(model[abs(lit)].propagate()) {
                 return true;
@@ -433,13 +471,15 @@ bool propagateGivesConflict() {
 void backtrack() {
     uint i = modelStack.size() - 1;
     int lit = 0;
-    while(!modelStack[i].is_lit || modelStack[i].id != 0) { // 0 is the DL mark
+    while(modelStack[i].type != VAR_PROPAGATION || modelStack[i].id != 0) { // 0 is the DL mark
         action a = modelStack[i];
-        if(a.is_lit) {
-            lit = a.id;
+        lit = a.id;
+        if(a.type == VAR_PROPAGATION) {
             setLiteralToUndef(lit);
-        } else {
+        } else if(a.type == CLAUSE_DELETION) {
             clauses[a.id].rollback();
+        } else if(a.type == WEIGHT_UPDATE) {
+            model[abs(lit)].updateWeight(lit < 0, false);
         }
         modelStack.pop_back();
         --i;
@@ -523,7 +563,7 @@ int main(int argc, char* argv[]) {
             return 20;
         }
         // start new decision level:
-        modelStack.push_back(action(0, true));  // push mark indicating new DL
+        modelStack.push_back(action(0, VAR_PROPAGATION));  // push mark indicating new DL
         ++indexOfNextLitToPropagate;
         ++decisionLevel;
         setLiteralToTrue(decisionLit);    // now push decisionLit on top of the mark
@@ -553,9 +593,7 @@ int main(int argc, char* argv[]) {
  * Done - List over vector on clauses' vars
  * Done - List over vector on model (for undefined vars)
  *
- * TODO - Try to save the linear traverse over clausules in each var to compute it's heuristic (weight)
+ * DONE - Try to save the linear traverse over clausules in each var to compute it's heuristic (weight)
  * TODO - Use unordered map instead of list for choosing next literal
- * TODO - Alternative to ^. Use list and remove when var is not undefined.
- *
- * TODO - USE A HEAP TO GET THE MOST CONFLICTIVE VAR (or vars). Counting only
+ * TODO - ALternative to ^. USE A HEAP TO GET THE MOST CONFLICTIVE VAR (or vars). Counting only
  */
