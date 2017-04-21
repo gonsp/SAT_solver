@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <sys/time.h>
+#include <queue>
 
 using namespace std;
 
@@ -159,8 +160,8 @@ struct var {
     int false_size;
     int first_true;
     int first_false;
-    float true_conflicts;
-    float false_conflicts;
+    int true_conflicts;
+    int false_conflicts;
     int true_weight;
     int false_weight;
 
@@ -300,9 +301,9 @@ struct var {
     //Used by the heuristic
     float weight(bool sizeOfTrueClauses) {
         if(sizeOfTrueClauses) {
-            return true_weight*(true_conflicts/totalConflicts);
+            return float(true_weight*true_size)*(float(true_conflicts)/totalConflicts);
         } else {
-            return false_weight*(false_conflicts/totalConflicts);
+            return float(false_weight*false_size)*(float(false_conflicts)/totalConflicts);
         }
     }
 
