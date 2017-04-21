@@ -1,8 +1,13 @@
 #include <iostream>
 #include <vector>
-#include <list>
+#include <sys/time.h>
 
 using namespace std;
+
+int totalDecisions = 0;
+int totalPropagations = 0;
+int totalConflicts = 1;
+struct timeval start, finish;
 
 #define UNDEF -1
 #define TRUE 1
@@ -34,7 +39,6 @@ void enableClause(const var_info& v);
 int currentValueInModel(int lit);
 void registerConflict(int lit);
 void incrementWeight(int lit);
-int totalConflicts = 1;
 
 struct clause {
 
@@ -461,6 +465,7 @@ bool propagateGivesConflict() {
         if(a.type == VAR_PROPAGATION) {
             int lit = a.id;
             if(model[abs(lit)].propagate()) {
+                ++totalPropagations;
                 return true;
             }
         }
@@ -506,6 +511,7 @@ int getNextDecisionLiteral() {
         }
         i = model[i].next;
     }
+    ++totalDecisions;
     return lit; // returns 0 when all literals are defined
 }
 
@@ -519,11 +525,24 @@ void checkmodel() {
     }
 }
 
+inline int printOutput(bool satisfiable) {
+    gettimeofday(&finish, NULL);
+    long long ttime = (finish.tv_sec*(uint)1e6+finish.tv_usec) - (start.tv_sec*(uint)1e6+start.tv_usec);
+//    cout << (satisfiable ? "SATISFIABLE" : "UNSATISFIABLE") << endl;
+//    cout << "Decisions:    " << totalDecisions << endl;
+//    cout << "Propagations: " << totalPropagations << endl;
+//    cout << "Conflicts:    " << totalConflicts << endl;
+//    cout << "Time (s):     " << (double)ttime/1000000 << endl;
+    return satisfiable ? 20 : 10;
+}
+
 int main(int argc, char* argv[]) {
 
     if(argc > 1) {
         freopen(argv[1], "r", stdin);
     }
+
+    gettimeofday(&start, NULL);
 
     readClauses(); // reads numVars, numClauses and clauses
     indexOfNextLitToPropagate = 0;
@@ -535,7 +554,7 @@ int main(int argc, char* argv[]) {
             int lit = clauses[i].literals.front().first;
             int val = currentValueInModel(lit);
             if(val == FALSE) {
-                //cout << "UNSATISFIABLE" << endl;
+                printOutput(false);
                 return 10;
             } else if(val == UNDEF) {
                 setLiteralToTrue(lit);
@@ -551,7 +570,7 @@ int main(int argc, char* argv[]) {
     while(true) {
         while(propagateGivesConflict()) {
             if(decisionLevel == 0) {
-                //cout << "UNSATISFIABLE" << endl;
+                printOutput(false);
                 return 10;
             }
             backtrack();
@@ -559,7 +578,7 @@ int main(int argc, char* argv[]) {
         int decisionLit = getNextDecisionLiteral();
         if(decisionLit == 0) {
             checkmodel();
-            //cout << "SATISFIABLE" << endl;
+            printOutput(true);
             return 20;
         }
         // start new decision level:
