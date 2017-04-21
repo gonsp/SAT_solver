@@ -297,26 +297,12 @@ struct var {
         return false;
     }
 
-    /*int i_size(vector<clause_info>& var_clauses, int real_size, int first) {
-        int size = 0;
-        int i = first;
-        while(i != -1) {
-            clause_info c = var_clauses[i];
-            int numUndefs = clauses[c.id].getUndefs();
-            size += numUndefs == 2 ? 1 : 0;
-            i = var_clauses[i].next;
-        }
-        return size;
-    }*/
-
     //Used by the heuristic
     float weight(bool sizeOfTrueClauses) {
         if(sizeOfTrueClauses) {
             return true_weight*(true_conflicts/totalConflicts);
-            //return i_size(true_clauses, true_size, first_true)*(true_conflicts/totalConflicts);
         } else {
             return false_weight*(false_conflicts/totalConflicts);
-            //return i_size(false_clauses, false_size, first_false)*(false_conflicts/totalConflicts);
         }
     }
 
