@@ -598,7 +598,7 @@ int main(int argc, char* argv[]) {
  * Done - List over vector on clauses' vars
  * Done - List over vector on model (for undefined vars)
  *
- * DONE - Try to save the linear traverse over clausules in each var to compute it's heuristic (weight)
- * TODO - Use unordered map instead of list for choosing next literal
+ * Done - Try to save the linear traverse over clausules in each var to compute it's heuristic (weight)
+ * Discarded - Use unordered map instead of list for choosing next literal
  * TODO - ALternative to ^. USE A HEAP TO GET THE MOST CONFLICTIVE VAR (or vars). Counting only
  */
